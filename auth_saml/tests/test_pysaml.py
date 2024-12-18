@@ -379,6 +379,43 @@ class TestPySaml(HttpCase):
         self.assertEqual(self.saml_provider.idp_metadata, expected_metadata)
 
     @responses.activate
+    def test_download_metadata_no_provider(self):
+        self.saml_provider.idp_metadata_url = "http://localhost:8000/metadata"
+        self.saml_provider.idp_metadata = ""
+        self.saml_provider.active = False
+        self.saml_provider.action_refresh_metadata_from_url()
+        self.assertFalse(self.saml_provider.idp_metadata)
+
+    @responses.activate
+    def test_download_metadata_error(self):
+        responses.add(
+            responses.GET,
+            "http://localhost:8000/metadata",
+            status=500,
+            content_type="text/xml",
+        )
+        self.saml_provider.idp_metadata_url = "http://localhost:8000/metadata"
+        self.saml_provider.idp_metadata = ""
+        with self.assertRaises(UserError):
+            self.saml_provider.action_refresh_metadata_from_url()
+        self.assertFalse(self.saml_provider.idp_metadata)
+
+    @responses.activate
+    def test_download_metadata_no_update(self):
+        expected_metadata = self.idp.get_metadata()
+        responses.add(
+            responses.GET,
+            "http://localhost:8000/metadata",
+            status=200,
+            content_type="text/xml",
+            body=expected_metadata,
+        )
+        self.saml_provider.idp_metadata_url = "http://localhost:8000/metadata"
+        self.saml_provider.idp_metadata = expected_metadata
+        self.saml_provider.action_refresh_metadata_from_url()
+        self.assertEqual(self.saml_provider.idp_metadata, expected_metadata)
+
+    @responses.activate
     def test_login_with_saml_metadata_empty(self):
         self.saml_provider.idp_metadata_url = "http://localhost:8000/metadata"
         self.saml_provider.idp_metadata = ""
