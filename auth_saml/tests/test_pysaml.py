@@ -7,11 +7,13 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import responses
+from saml2.sigver import SignatureError
 
 from odoo.exceptions import AccessDenied, UserError, ValidationError
 from odoo.tests import HttpCase, tagged
+from odoo.tools import mute_logger
 
-from .fake_idp import CONFIG, FakeIDP
+from .fake_idp import CONFIG, FakeIDP, UnsignedFakeIDP
 
 
 @tagged("saml", "post_install", "-at_install")
@@ -452,3 +454,35 @@ class TestPySaml(HttpCase):
             body=up_to_date_metadata,
         )
         self.test_login_with_saml()
+
+    @responses.activate
+    def test_login_with_saml_unsigned_response(self):
+        self.add_provider_to_user()
+        self.saml_provider.idp_metadata_url = "http://localhost:8000/metadata"
+        unsigned_idp = UnsignedFakeIDP([self.saml_provider._metadata_string()])
+        redirect_url = self.saml_provider._get_auth_request()
+        self.assertIn("http://localhost:8000/sso/redirect?SAMLRequest=", redirect_url)
+
+        response = unsigned_idp.fake_login(redirect_url)
+        self.assertEqual(200, response.status_code)
+        unpacked_response = response._unpack()
+
+        responses.add(
+            responses.GET,
+            "http://localhost:8000/metadata",
+            status=200,
+            content_type="text/xml",
+            body=self.saml_provider.idp_metadata,
+        )
+        with (
+            self.assertRaises(SignatureError),
+            mute_logger("saml2.entity"),
+            mute_logger("saml2.client_base"),
+        ):
+            (database, login, token) = (
+                self.env["res.users"]
+                .sudo()
+                .auth_saml(
+                    self.saml_provider.id, unpacked_response.get("SAMLResponse"), None
+                )
+            )

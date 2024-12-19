@@ -38,7 +38,7 @@ CONFIG = {
             "endpoints": {
                 "single_sign_on_service": [
                     ("%s/sso/redirect" % BASE, BINDING_HTTP_REDIRECT),
-                    ("%s/sso/post" % BASE, BINDING_HTTP_POST),
+                   ("%s/sso/post" % BASE, BINDING_HTTP_POST),
                 ],
             },
             "policy": {
@@ -165,3 +165,13 @@ class FakeIDP(Server):
         )
 
         return DummyResponse(**_dict)
+
+
+class UnsignedFakeIDP(FakeIDP):
+    def create_authn_response(
+        self,
+        *args,
+        **kwargs,
+    ):
+        kwargs["sign_assertion"] = False
+        return super().create_authn_response(*args, **kwargs)
